@@ -2,6 +2,7 @@ module AST where
 
 import Data.Fix
 import Data.String
+import Data.Maybe
 import Text.Show.Deriving
 
 type Value = Double
@@ -20,6 +21,7 @@ data ExprF a = Value Value
              deriving (Functor, Foldable, Traversable)
 
 type Expr = Fix ExprF
+type Env = Name -> Maybe Value
 
 deriving instance (Show a) => Show (ExprF a)
 $(deriveShow1 ''ExprF)
@@ -46,8 +48,9 @@ instance Floating Expr where
 instance IsString Expr where
     fromString = Fix . Variable
 
-eval :: Expr -> Expr
-eval = foldFix $ Fix . \case
+eval :: Expr -> Env -> Expr
+eval e env = flip foldFix e $ Fix . \case
+    Variable name | isJust (env name)        -> Value $ fromJust $ env name
     Plus     (Fix (Value x)) (Fix (Value y)) -> Value $ x + y
     Plus     (Fix (Value 0)) (Fix x)         -> x
     Plus     (Fix x)         (Fix (Value 0)) -> x
@@ -67,7 +70,7 @@ eval = foldFix $ Fix . \case
     x -> x
 
 diff :: Expr -> Name -> Expr
-diff (Fix e) withRespectTo = eval $
+diff (Fix e) withRespectTo = flip eval (const Nothing) $
     case e of
       Value _      -> 0
       Variable x   -> if withRespectTo == x then 1 else 0
